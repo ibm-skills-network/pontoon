@@ -1,0 +1,50 @@
+name: Build ponton image
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch: {}
+
+jobs:
+  push_to_registry:
+    name: Push Docker image to Docker Hub
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      - name: Cache Docker layers
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+      - name: Check out the Pontoon repo
+        uses: actions/checkout@v2
+        with:
+          repository: mozilla/pontoon
+      - name: Set variables
+        id: vars
+        shell: bash
+        run: |
+          echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
+      - name: Copy and setup stuff
+        shell: bash
+        run: |
+          cp ./docker/config/webapp.env.template ./docker/config/webapp.env
+      - name: Login to Docker Hub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build and push
+        uses: docker/build-push-action@v2
+        with:
+          tags: |
+            docker.io/skillsnetwork/pontoon:latest
+            docker.io/skillsnetwork/pontoon:${{ steps.vars.outputs.sha_short }}
+          context: .
+          file: docker/Dockerfile
+          push: true
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache
